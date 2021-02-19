@@ -7,6 +7,7 @@ import dotenv from 'dotenv'
 import { useState, useCallback, useRef } from 'react'
 import usePLacesAutocomplete, { getGeocode, getLatLng } from 'use-places-autocomplete'
 import { Combobox, ComboboxInput, ComboboxPopover, ComboboxList, ComboboxOption } from '@reach/combobox'
+import usePlacesAutocomplete from 'use-places-autocomplete';
 
 function App() {
     const libraries = ['places'];
@@ -42,8 +43,14 @@ function App() {
     }, []) //This function wont change in between re-renders
 
     const mapRef = useRef();
+
     const onMapLoad = useCallback((map) => {
         mapRef.current = map;
+    }, [])
+
+    const panTo = useCallback(({lat, lng}) => {
+        mapRef.current.panTo({lat, lng});
+        mapRef.current.setZoom(14);
     }, [])
 
     if(loadError) return "Error loading Maps";
@@ -56,7 +63,7 @@ function App() {
               <span role="img" aria-label='tent'>🦁 </span> 
             </h1>
 
-            {/* <Search /> */}
+            <Search panTo = {panTo}/>
           <GoogleMap 
             mapContainerStyle={mapContainerStyle} 
             zoom={8} 
@@ -96,3 +103,42 @@ function App() {
 }
 
 export default App;
+
+function Search({ panTo }){
+    const { ready, value, suggestions: {status, data}, setValue, clearSuggestions} = usePlacesAutocomplete({
+        requestOptions: {
+            location: { lat: () => -1.2884, lng: () => 36.8233}, //Only return places near the stated coordinates, that is places in a 200km radis of Nairobi
+            radius : 200 * 1000, //radius in meters
+        }
+    })
+
+    return (
+    <div className='search'>
+        <Combobox onSelect={async (address) => {
+            setValue(address, false); //Updates the state with whatever address the user has chosen
+            clearSuggestions(); //clears the suggestions after the user has selected an address
+
+            try {
+                const results = await getGeocode({ address });
+                const {lat, lng } = await getLatLng(results[0]);
+                panTo({lat, lng});
+            } catch (error) {
+                console.log(error)
+            }
+            console.log(address)
+        }}>
+            <ComboboxInput 
+                value={value} 
+                onChange={(e) => {
+                    setValue(e.target.value)
+                }}
+                disable={!ready}
+                placeholder="Enter an address"
+            />
+            <ComboboxPopover>
+                {status === 'OK' && data.map(({ id, description }) => <ComboboxOption key={id} value={description} />)}
+            </ComboboxPopover>
+        </Combobox>
+    </div>
+    )
+}
